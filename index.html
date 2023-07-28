@@ -1,0 +1,664 @@
+<header>
+  <style>
+    input, button {
+      margin: 2px
+    }
+
+    input[type="file"]{
+      margin: 10px;
+    }
+  </style>
+  <script>
+    class Validator{
+      static byte(value){
+        if (value < -255){
+          return -255
+        }
+        if (value > 255){
+          return 255
+        }
+        return value
+      }
+      static positivebyte(value){
+        if (value < 0){
+          return 0
+        }
+        if (value > 255){
+          return 255
+        }
+        return value
+      }
+
+      static isInvalidModifierLength(number){
+        // limit number of options for Room Modifier Lists.
+        // Only 0x1F can be configured for any single list.
+        return number>0x1F
+      }
+    }
+
+    // class to handle changing Reprise Configuration and 
+    // copying randomizer rom settings
+    class Configurator{
+      static _RO = 0x8000000   // ROM address offset, when editing the ROM itself this offset isn't used
+      static BaseDifficulty = 0x87EFF00 - this._RO
+      static DifficultyInterval = 0x87EFF01 - this._RO
+      static PlayerHPDecrease = 0x87EFF02 - this._RO
+      static PlayerHPMin = 0x87EFF03 - this._RO
+      static EnemyHPIncrease = 0x87EFF04 - this._RO
+      static DeleteGameOnDeath = 0x87EFF05 - this._RO
+      static ModifierAllRooms = 0x87EFF06 - this._RO
+      // static ModifierOverride = 0x87EFF07 - this._RO // if any modifier would be active, use this one instead (not used anymore, change lists instead to avoid confusion)
+      static ProgressionType = 0x87EFF08 - this._RO
+      static ClassicvaniaMovement = 0x87EFF09 - this._RO   // removes air control from entire game
+      static RoomModifierList = 0x87EFEE0 - this._RO
+      static BossModifierList = 0x87EFEC0 - this._RO
+      static BossGFXModifierList = 0x87EFEA0 - this._RO
+      static ModifierListLength = 0x20 // this length includes the first value being the length of the list itself. (0x1F modifiers)
+
+
+      static TEXT_DATA = [0x80EA72C-this._RO, 0x8116644-this._RO]
+      static TEXT_POINTERS = [0x08506b38-this._RO, 0x8509873-this._RO]
+      static ENEMY_DATA = [0x80E9644-this._RO, 0x80EA604+0x24-this._RO]
+      static SMALL_FONT_DATA = [0x8509876-this._RO, 0x8509876+0xC40-this._RO] // assumed ending based on large font in DSVEdit
+      static SMALL_FONT_WIDTH_DATA = [0x80e2ec1-this._RO, 0x80e2ec1+0x380-this._RO]  // assumed ending based on large font in DSVEdit
+      static LARGE_FONT_DATA = [0x850A136-this._RO, 0x850AD75-this._RO]
+      static LARGE_FONT_WIDTH_DATA = [0x80E2B4C-this._RO, 0x80E2B4C+0x4*0xDD-this._RO]
+
+      static TEXT_ENEMY_RANDOSTATS = [0x8704000-this._RO, 0x8705000-this._RO]
+      static TEXT_POINTERS_ENEMY_NAMES = [ 0x085074ac-this._RO, 0x0850766c+0x3-this._RO ]  // bat through Chaos enemy names
+      static ENEMY_STAT_FONT1 = [0x8509876-this._RO, 0x850A772-1-this._RO]
+      static ENEMY_STAT_FONT2 = [0x850A78E+0xE-this._RO, 0x8509876+0xC40-this._RO]
+      static ENEMY_STAT_FONT_WIDTH1 = [0x80e2ec1-this._RO, 0x80E2D15-1-this._RO]
+      static ENEMY_STAT_FONT_WIDTH2 = [0x80E2D1D+1-this._RO, 0x80e2ec1+0x380-this._RO]
+      // All reprise font changes (cross, skull, and @ characters) are adjacent, so exclude 0x850A772-0x850A78E+0xE and 0x80E2D15-0x80E2D1D 
+        //  exclude 0x850A772 through +0xE and 0x80E2D15 for skull/bone
+        //  exclude 0x850A780 through +0xE and 0x80E2D19 for Cross
+        //  exclude 0x850A78E through +0xE and 0x80E2D1D for @ symbol
+
+
+      // Data ranges just to copy Enemy stats / names as well as customized font characters from fuseCV's Randomizer
+      static DATA_RANGES = [
+        this.TEXT_ENEMY_RANDOSTATS,
+        this.TEXT_POINTERS_ENEMY_NAMES,
+        this.ENEMY_STAT_FONT1,
+        this.ENEMY_STAT_FONT2,
+        this.ENEMY_STAT_FONT_WIDTH1,
+        this.ENEMY_STAT_FONT_WIDTH2
+      ]
+
+      static SettingsNames = [
+        'baseDifficulty', 
+        'difficultyInterval', 
+        'playerHPDecrease',
+        'playerHPMin',
+        'enemyHPIncrease',
+        'deleteGameOnDeath',
+        'progressionType',
+        'modifierAllRooms',
+        'baseModifierList',
+        'bossModifierList',
+        'bossGFXModifierList'
+      ]
+
+      static copyRandoRomEnemies = function(randoRomArray, newRomArray){
+        console.log('Applying Randomizer Rom changes to Enemy stats / names / custom font characters...')
+        for(let i=0; i<this.DATA_RANGES.length; i++){
+          let dataRange = this.DATA_RANGES[i]
+
+          dataRange[0] -= this._RO;
+          dataRange[1] -= this._RO;
+                  
+          // replace dataRange in newRomArray with randoRomArray's Data
+          for(let j=dataRange[0]; j<=dataRange[1]; j++){
+            newRomArray[j] = randoRomArray[j];
+          }
+        }
+      }
+
+      static writeListToRom = function(romArray, list, location, fillLength){
+        for(let i=0; i<list.length; i++){
+          romArray[location+i] = list[i]
+        }
+        // fill remaining length with 0
+        for(let i=list.length; i<fillLength; i++){
+          romArray[location+i] = 0
+        }
+      }
+      
+      static applySettings = function(settingsDict, repriseRomArray){
+        for (let settingName of this.SettingsNames){
+          if (!(settingName in settingsDict)){
+            console.error(`Invalid passing of settingsDictionary, missing ${settingName}`)
+            alert('Error with applying settings')
+          }
+        }
+        repriseRomArray[this.BaseDifficulty] = settingsDict['baseDifficulty'];
+        repriseRomArray[this.DifficultyInterval] = settingsDict['difficultyInterval'];
+        repriseRomArray[this.PlayerHPDecrease] = settingsDict['playerHPDecrease'];
+        repriseRomArray[this.PlayerHPMin] = settingsDict['playerHPMin'];
+        repriseRomArray[this.EnemyHPIncrease] = settingsDict['enemyHPIncrease'];
+        repriseRomArray[this.DeleteGameOnDeath] = settingsDict['deleteGameOnDeath'];    
+        repriseRomArray[this.ProgressionType] = settingsDict['progressionType'];        
+        repriseRomArray[this.ModifierAllRooms] = settingsDict['modifierAllRooms'];
+
+        // write modifier lists to rom
+        let baseModifierList = settingsDict['baseModifierList']
+        let bossModifierList = settingsDict['bossModifierList']
+        let bossGFXModifierList = settingsDict['bossGFXModifierList']
+        this.writeListToRom(repriseRomArray, baseModifierList, this.RoomModifierList, this.ModifierListLength)
+        this.writeListToRom(repriseRomArray, bossModifierList, this.BossModifierList, this.ModifierListLength)
+        this.writeListToRom(repriseRomArray, bossGFXModifierList, this.BossGFXModifierList, this.ModifierListLength)
+      }
+    }
+
+    /* Initialize page */
+    document.addEventListener("DOMContentLoaded", () => {
+      baseDifficultyInput = document.getElementById('base-difficulty');
+      difficultyInterval = document.getElementById('difficulty-interval');
+      playerHPDecrease = document.getElementById('difficulty-player-hp');
+      playerHPMin = document.getElementById('difficulty-player-hp-min');
+      enemyHPIncrease = document.getElementById('difficulty-enemy-hp');
+      deleteGameOnDeath = document.getElementById('delete-on-death');
+      progressionType = document.getElementById('experimental-progression');
+      modifierAllRooms = document.getElementById('modifier-every-room');
+
+      // validation / restriction on input values
+      let byteElements = [baseDifficultyInput, difficultyInterval, playerHPDecrease, playerHPMin, enemyHPIncrease]
+      for( let element of byteElements){
+        element.onchange = (e) => {
+          element.value = Validator.positivebyte(element.value);
+        }
+      }
+
+      create_room_modifier_widgets('room-modifier-section');
+
+      baseModifierListElement = document.getElementById('base-room-modifiers-active-list');
+      bossModifierListElement = document.getElementById('boss-room-modifiers-active-list');
+      bossGFXModifierListElement = document.getElementById('boss-gfx-room-modifiers-active-list');
+    });
+
+    async function saveROM(blob){
+      const workElement = document.createElement("a");
+      const repriseRomName = document.getElementById('repriseRom').files[0].name;
+      const newRomName = repriseRomName.slice(0,-4)+'_conf.gba'
+    
+      document.body.appendChild(workElement);
+      workElement.setAttribute('download', newRomName);
+      workElement.setAttribute('id', 'downloadRomLink')
+      workElement.href = URL.createObjectURL(blob);
+      workElement.click();
+      document.body.removeChild(workElement);
+    }
+
+    function applyPatch(){
+      const randoRomElement = document.getElementById('randoRom');
+      const repriseRomElement = document.getElementById('repriseRom');
+
+      let errorMessages = [];
+      
+      if (repriseRomElement.files.length === 0){
+        errorMessages.push('Target ROM not selected');
+      }
+
+      if (errorMessages.length !== 0){
+        console.log(errorMessages);
+        alert(errorMessages);
+        return;
+      }
+      
+      if (repriseRomElement.files.length === 0){
+        errorMessages.push('Reprise ROM not selected');
+      }
+
+      createPatchedFile(randoRomElement.files[0], repriseRomElement.files[0])
+        .then( (patchedRom) => {
+          saveROM(patchedRom);
+          console.log(`Done patching!`);
+        })
+    }
+
+    function getModifierList(selectElement){
+      let modifierListDefinition = [0]; // first item should be list length
+      for (let option of selectElement.children){
+        modifierListDefinition.push(option.value)
+      }
+      // update list length based on number of options (list length minus the first item)
+      modifierListDefinition[0] = modifierListDefinition.length-1 
+
+      return modifierListDefinition;
+    }
+
+    function getSettingsDict(){
+      // returns setting dictionary from input elements
+      let settingsDict = {
+        'baseDifficulty': baseDifficultyInput.value,
+        'difficultyInterval': difficultyInterval.value,
+        'playerHPDecrease': playerHPDecrease.value,
+        'playerHPMin': playerHPMin.value,
+        'enemyHPIncrease': enemyHPIncrease.value,
+        'deleteGameOnDeath': deleteGameOnDeath.checked,
+        'progressionType': progressionType.checked,
+        'modifierAllRooms': modifierAllRooms.value,
+        'baseModifierList': getModifierList(baseModifierListElement),
+        'bossModifierList': getModifierList(bossModifierListElement),
+        'bossGFXModifierList': getModifierList(bossGFXModifierListElement),
+      }
+
+      for (let key in settingsDict){
+        console.log(`Setting ${key} is ${settingsDict[key]}`)
+      }
+
+      return settingsDict
+    }
+
+    function getArrayBuffer(file){
+      return new Promise( (resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = () => {
+          resolve(new Uint8Array(reader.result))
+        }
+
+        reader.onerror = (event) => {
+          reject(event.target.error)
+        }
+
+        reader.readAsArrayBuffer(file)
+      })
+    }
+
+    function createPatchedFile(randoRom, repriseRom) {
+      return new Promise( async (resolve, reject) => {
+        let reprisePromise = getArrayBuffer(repriseRom);
+        let randoPromise, randoRomArray, repriseRomArray;
+
+        if (randoRom){
+          randoPromise = getArrayBuffer(randoRom);
+
+          [randoRomArray, repriseRomArray] = await Promise.all([randoPromise, reprisePromise]);
+          if (randoRomArray.byteLength !== repriseRomArray.byteLength){
+            console.error('Roms not the same size');
+            alert('Roms not the same size');
+          }
+        }
+        else{
+          repriseRomArray = await reprisePromise;
+        }
+
+        // start with a copy of the target ROM
+        let newRomArray = repriseRomArray.slice();
+        
+        // if sourceRom was provided, copy data ranges
+        if (randoRom){
+          Configurator.copyRandoRomEnemies(randoRomArray, newRomArray)
+        }
+
+        // apply other settings set on web page
+        let settingsDict = getSettingsDict();
+
+        Configurator.applySettings(settingsDict, newRomArray);
+
+        resolve(new Blob([newRomArray]))
+      })      
+    }
+
+    function create_room_modifier_widgets(nameOfSection){
+      // creates a section with a list of room modifiers on the left, buttons to manage,
+      // and the list the user can add them to on the right.
+
+      // create each section
+      const sections = document.getElementsByClassName(nameOfSection);
+      for (var i = 0; i< sections.length; i++){
+        let section = sections[i];
+        section.innerHTML = room_modifier_select_list(section.id);
+      }
+
+      // add events to add/remove buttons linking them to their respective lists
+      removeButtons = document.getElementsByClassName('remove-modifier')
+      for (let removeButton of removeButtons){
+        // remove the '-remove' at the end, and use `-active-list` instead
+        let relativeSelectName = removeButton.id.slice(0,-7)+'-active-list'
+        let relativeSelectElement = document.getElementById(relativeSelectName);
+        removeButton.onclick = (e) => {
+          removeOptions(relativeSelectElement);
+        }
+      }
+      addButtons = document.getElementsByClassName('add-modifier')
+      for (let addButton of addButtons){
+        // remove the '-add' at the end, and use list suffixes instead
+        let optionSelectName = addButton.id.slice(0,-4)+'-select-list'
+        let activeSelectName = addButton.id.slice(0,-4)+'-active-list'
+        let optionSelectElement = document.getElementById(optionSelectName);
+        let activeSelectElement = document.getElementById(activeSelectName);
+        addButton.onclick = (e) => {
+          addOptions(optionSelectElement, activeSelectElement);
+        }
+      }
+      defaultButtons = document.getElementsByClassName('default-modifiers');
+      for (let defaultButton of defaultButtons){
+        let sectionName = defaultButton.id.slice(0,-'-reset-defaults'.length)
+        defaultButton.onclick = (e) => {
+          let section = document.getElementById(sectionName);
+          section.innerHTML = room_modifier_select_list(section.id);
+        }
+      }
+    }
+
+    function removeOptions(selectElement){
+      let options = selectElement.children;
+      let optionsToRemove = [];
+      for (let option of options){
+        if (!option.selected || option.value == -1){
+          continue
+        }
+        optionsToRemove.push(option);
+      }
+      for (let option of optionsToRemove){
+        selectElement.removeChild(option);
+      }
+    }
+    function addOptions(optionSelectElement, activeSelectElement){
+      let options = optionSelectElement.children;
+      let optionsToAdd = []
+      for (let option of options){
+        if (!option.selected || option.value == -1){
+          continue
+        }
+
+        optionsToAdd.push(option);
+      }
+      if (Validator.isInvalidModifierLength(activeSelectElement.length+optionsToAdd.length)){
+        console.log('Too many modifiers to add (limit is 31)')
+        alert('Too many modifiers to add (limit is 31)');
+        return;
+      }
+      for (let option of optionsToAdd){
+        const newOptionElement = document.createElement("option");
+        newOptionElement.value = option.value;
+        newOptionElement.innerHTML = option.innerHTML;
+        activeSelectElement.appendChild(newOptionElement);
+      }
+    }
+
+    function showMoreInfo(){
+      const moreInfoElement = document.getElementById('more-info');
+      moreInfoElement.style="display:block"
+    }
+
+    function room_modifier_select_list(nameOfSection){
+      // returns innerHTML with a table row containing a room modifier list and editing interface
+      
+      // get default options based on nameOfSection
+      // ugly way of doing this but quick!
+      let defaultOptions;
+      if (nameOfSection=='base-room-modifiers'){
+        defaultOptions = `<option value="1"> Poisonous </option>
+                  <option value="2"> Cursed </option>
+                  <option value="3"> Petrifying </option>
+                  <option value="5"> DoubleHP </option>
+                  <option value="6"> WingedSwarm </option>
+                  <option value="7"> NoRedSouls </option>
+                  <option value="8"> HighKnockback </option>
+                  <option value="9"> HighGravity </option>
+                  <option value="10"> SpectralDevil </option>
+                  <option value="11"> GhostSwarm </option>
+                  <option value="12"> SpectralCrow </option>
+                  <option value="13"> PoisonHearts </option>
+                  <option value="14"> CursedGold </option>
+                  <option value="16"> LowGravity </option>
+                  <option value="17"> NoItems </option>
+                  <option value="18"> Windy </option>
+                  <option value="19"> Bouncy </option>
+                  <option value="20"> Slippery </option>
+                  <option value="21"> NoAirControl </option>
+                  <option value="9"> HighGravity </option>
+                  <option value="16"> LowGravity </option>
+                  <option value="17"> NoItems </option>
+                  <option value="18"> Windy </option>
+                  <option value="19"> Bouncy </option>
+                  <option value="20"> Slippery </option>
+                  <option value="21"> NoAirControl </option>`
+      }
+      if (nameOfSection=='boss-room-modifiers'){
+        defaultOptions = `<option value="1"> Poisonous </option>
+                  <option value="2"> Cursed </option>
+                  <option value="8"> HighKnockback </option>
+                  <option value="9"> HighGravity </option>
+                  <option value="10"> SpectralDevil </option>
+                  <option value="11"> GhostSwarm </option>
+                  <option value="12"> SpectralCrow </option>
+                  <option value="16"> LowGravity </option>
+                  <option value="17"> NoItems </option>
+                  <option value="18"> Windy </option>
+                  <option value="19"> Bouncy </option>
+                  <option value="20"> Slippery </option>
+                  <option value="21"> NoAirControl </option>`
+      }
+      if(nameOfSection=='boss-gfx-room-modifiers'){
+        defaultOptions = `<option value="1"> Poisonous </option>
+                  <option value="2"> Cursed </option>
+                  <option value="8"> HighKnockback </option>
+                  <option value="9"> HighGravity </option>
+                  <option value="16"> LowGravity </option>
+                  <option value="17"> NoItems </option>
+                  <option value="18"> Windy </option>
+                  <option value="19"> Bouncy </option>
+                  <option value="20"> Slippery </option>
+                  <option value="21"> NoAirControl </option>`
+      }
+
+      return `<tr>
+              <td>
+                List of modifiers:<br>
+                <select style="height:15em; width:15em" name="${nameOfSection}-select-list" id="${nameOfSection}-select-list" multiple>
+                  <option value="1"> Poisonous </option>
+                  <option value="2"> Cursed </option>
+                  <option value="3"> Petrifying </option>
+                  <option value="4"> Theif </option>
+                  <option value="5"> DoubleHP </option>
+                  <option value="6"> WingedSwarm </option>
+                  <option value="7"> NoRedSouls </option>
+                  <option value="8"> HighKnockback </option>
+                  <option value="9"> HighGravity </option>
+                  <option value="10"> SpectralDevil </option>
+                  <option value="11"> GhostSwarm </option>
+                  <option value="12"> SpectralCrow </option>
+                  <option value="13"> PoisonHearts </option>
+                  <option value="14"> CursedGold </option>
+                  <option value="15"> DarkRoom (experimental) </option>
+                  <option value="16"> LowGravity </option>
+                  <option value="17"> NoItems </option>
+                  <option value="18"> Windy </option>
+                  <option value="19"> Bouncy </option>
+                  <option value="20"> Slippery </option>
+                  <option value="21"> NoAirControl </option>
+                </select>
+              </td>
+              <td>
+                <div>
+                  <button class="add-modifier" id="${nameOfSection}-add">-- Add Selected --></button>
+                </div>
+                <div>
+                  <button class="remove-modifier" id="${nameOfSection}-remove">Remove Selected</button>
+                </div>
+                <div>
+                  <br><br>
+                  <button class="default-modifiers" id="${nameOfSection}-reset-defaults">Reset to Default</button>
+                </div>
+              </td>
+              <td>
+                Active list:<br>
+                <select style="height:15em; width:15em" name="${nameOfSection}-active-list" id="${nameOfSection}-active-list" multiple>      
+                  ${defaultOptions}
+                </select>
+              </td>
+              </tr>`
+    }
+  </script>
+  <style>
+
+  </style>
+</header>
+
+<html>
+  <title>Aria of Sorrow: Reprise Configuration Tool</title>
+  <body>
+    <h1>Aria of Sorrow: Reprise Configuration Tool for v0.8</h1>
+    <div>
+      <div>
+        This tool does not upload or download ROMs and operates locally.
+      </div>
+      <div name="rom-selection">
+        <h3> Select ROM(s) </h3>
+        Select Reprise ROM
+        <div>
+          <input id="repriseRom" type="file"></input> 
+        </div>
+        <br>
+
+        (Optional) Select Randomizer ROM to copy enemy stats from
+        <br>
+        <a href="https://aosrando.surge.sh/">[ Link to FuseCV's randomizer ]</a> 
+        <a href="/" onclick="showMoreInfo();">[ More info ] </a>
+        <div>
+          <input id="randoRom" type="file"></input> 
+        </div>      
+        <div style="display:none" id="more-info">
+          <p style="width: 30em">
+          * This configuration tool can only copy the random enemy stats from FuseCV's randomizer. 
+          To randomize enemy stats, select a vanilla Aria of Sorrow ROM on the randomizer page. Once
+          loaded, go to the 'Advanced' view and change the 'Enemy Stat' selection option. Then
+          click 'Randomize', and then the 'Download' button afterwards. 
+          Select this downloaded rom (aosrand_0.gba) as the Randomizer ROM above.
+          </p>
+        </div>
+      </div>
+
+      <div name="reprise-configuration">
+        <h3>Reprise Configuration</h3>
+        <div>
+          <input id="base-difficulty" type="number" value="0"\> Base Difficulty (Starts game with this difficulty counter. default: 0)
+          <br><input id="difficulty-interval" type="number" value="8"\> Number of minutes between difficulty increases (default: 8)
+          <br><input id="difficulty-player-hp" type="number" value="15"\> Amount Player Max HP decreases with each difficulty increase (default: 15)
+          <br><input id="difficulty-player-hp-min" type="number" value="100"\> Minimum Player Max HP with difficulty increases (default: 100)
+          <br><input id="difficulty-enemy-hp" type="number" value="15"\> Amount Enemy HP increases with each difficulty increase (default: 15)
+          <br><input id="delete-on-death" type="checkbox" checked="true"\> Delete Game on Death (default: checked)
+          <br><input id="experimental-progression" type="checkbox"\> Enable experimental progression. Specific ranges of enemies and items are restricted to each area (Default: unchecked)
+          <br><br>
+          <select name="modifier-every-room" id="modifier-every-room"\>
+            
+            <option value="0">No (default)</option>
+            <option value="1"> Poisonous </option>
+            <option value="2"> Cursed </option>
+            <option value="3"> Petrifying </option>
+            <!-- <option value="4"> Theif </option> -->
+            <option value="5"> DoubleHP </option>
+            <option value="6"> WingedSwarm </option>
+            <option value="7"> NoRedSouls </option>
+            <option value="8"> HighKnockback </option>
+            <option value="9"> HighGravity </option>
+            <option value="10"> SpectralDevil </option>
+            <option value="11"> GhostSwarm </option>
+            <option value="12"> SpectralCrow </option>
+            <option value="13"> PoisonHearts </option>
+            <option value="14"> CursedGold </option>
+            <!--  <option value="15"> DarkRoom </option> -->
+            <option value="16"> LowGravity </option>
+            <option value="17"> NoItems </option>
+            <option value="18"> Windy </option>
+            <option value="19"> Bouncy </option>
+            <option value="20"> Slippery </option>
+            <option value="21"> NoAirControl </option>
+          </select>  
+          <label for="modifier-every-room">Modifier for every room. <b>This overrides any modifier lists below!</b> (default: No.)</label> 
+      </div>
+      
+
+      <div id="modifier-configuration">
+        <h3> Room Modifiers (rooms in generated areas)</h3>
+        <label for="modifier-list">*You can add multiple of the same one to give it a higher chance</label>
+        <br>
+        <table>
+          <tr id="base-room-modifiers" class="room-modifier-section">
+          </tr>
+
+        </table>
+
+        <h3> Boss Room Modifiers  (excluding Graham, Headhunter, Chaos) </h3>
+        <table>
+          <tr id="boss-room-modifiers" class="room-modifier-section">
+          </tr>
+          <!--
+          <option value="0">No (default)</option>
+          <option value="1"> Poisonous </option>
+          <option value="2"> Cursed </option>
+          <option value="8"> HighKnockback </option>
+          <option value="9"> HighGravity </option>
+          <option value="10"> SpectralDevil </option>
+          <option value="11"> GhostSwarm </option>
+          <option value="12"> SpectralCrow </option>
+          <option value="16"> LowGravity </option>
+          <option value="17"> NoItems </option>
+          <option value="18"> Windy </option>
+          <option value="19"> Bouncy </option>
+          <option value="20"> Slippery </option>
+          <option value="21"> NoAirControl </option>  
+          -->
+        </table>
+
+        <h3> Graham, Headhunter, Chaos Boss Room Modifiers </h3>
+        * Allowing any enemy spawning modifiers causes loading issues with these bosses!!!
+        <table>
+          <tr id="boss-gfx-room-modifiers" class="room-modifier-section">
+          </tr>
+          <!--
+                <option value="0">No (default)</option>
+                <option value="1"> Poisonous </option>
+                <option value="2"> Cursed </option>
+                <option value="8"> HighKnockback </option>
+                <option value="9"> HighGravity </option>
+                <option value="16"> LowGravity </option>
+                <option value="17"> NoItems </option>
+                <option value="18"> Windy </option>
+                <option value="19"> Bouncy </option>
+                <option value="20"> Slippery </option>
+                <option value="21"> NoAirControl </option>                  
+          -->
+        </table>
+       
+      <br>
+      <!--
+        Select 
+        .definelabel ModifierPoisonous, 0x1
+        .definelabel ModifierCursed, 0x2
+        .definelabel ModifierPetrifying, 0x3
+        .definelabel ModifierTheif, 0x4
+        .definelabel ModifierDoubleHP, 0x5
+        .definelabel ModifierWingedSwarm, 0x6
+        .definelabel ModifierNoRedSouls, 0x7
+        .definelabel ModifierHighKnockback, 0x8
+        .definelabel ModifierHighGravity, 0x9
+        .definelabel ModifierSpectralDevil, 0xA
+        .definelabel ModifierGhostSwarm, 0xB
+        .definelabel ModifierSpectralCrow, 0xC
+        .definelabel ModifierPoisonHearts, 0xD
+        .definelabel ModifierCursedGold, 0xE
+        .definelabel ModifierDarkRoom, 0xF
+        .definelabel ModifierLowGravity, 0x10
+        .definelabel ModifierNoItems, 0x11
+        .definelabel ModifierWindy, 0x12
+        .definelabel ModifierBouncy, 0x13
+        .definelabel ModifierSlippery, 0x14
+        .definelabel ModifierNoAirControl, 0x15
+      -->
+      </div>
+
+
+
+
+
+      <button onclick="applyPatch()"><h3>Create New Rom</h3></button>
+      <br><br>
+    </div>
+  </body>
+</html>
