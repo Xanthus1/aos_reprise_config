@@ -104,11 +104,9 @@
         console.log('Applying Randomizer Rom changes to Enemy stats / names / custom font characters...')
         for(let i=0; i<this.DATA_RANGES.length; i++){
           let dataRange = this.DATA_RANGES[i]
-
-          dataRange[0] -= this._RO;
-          dataRange[1] -= this._RO;
                   
           // replace dataRange in newRomArray with randoRomArray's Data
+          console.log(`replacing range ${dataRange[0]} through ${dataRange[1]}`)
           for(let j=dataRange[0]; j<=dataRange[1]; j++){
             newRomArray[j] = randoRomArray[j];
           }
@@ -180,7 +178,7 @@
     async function saveROM(blob){
       const workElement = document.createElement("a");
       const repriseRomName = document.getElementById('repriseRom').files[0].name;
-      const newRomName = repriseRomName.slice(0,-4)+'_conf.gba'
+      const newRomName = 'AoS_Reprise_configured.gba'
     
       document.body.appendChild(workElement);
       workElement.setAttribute('download', newRomName);
@@ -197,17 +195,13 @@
       let errorMessages = [];
       
       if (repriseRomElement.files.length === 0){
-        errorMessages.push('Target ROM not selected');
+        errorMessages.push('Reprise ROM not selected');
       }
 
       if (errorMessages.length !== 0){
         console.log(errorMessages);
         alert(errorMessages);
         return;
-      }
-      
-      if (repriseRomElement.files.length === 0){
-        errorMessages.push('Reprise ROM not selected');
       }
 
       createPatchedFile(randoRomElement.files[0], repriseRomElement.files[0])
@@ -519,7 +513,7 @@
         (Optional) Select Randomizer ROM to copy enemy stats from
         <br>
         <a href="https://aosrando.surge.sh/">[ Link to FuseCV's randomizer ]</a> 
-        <a href="/" onclick="showMoreInfo();">[ More info ] </a>
+        <button href="/" onclick="showMoreInfo();">More info </button>
         <div>
           <input id="randoRom" type="file"></input> 
         </div>      
