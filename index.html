@@ -405,13 +405,17 @@
                   <option value="19"> Bouncy </option>
                   <option value="20"> Slippery </option>
                   <option value="21"> NoAirControl </option>
-                  <option value="9"> HighGravity </option>
+                  <option value="22"> HyperEnemies </option>
+                  <option value="23"> SlowWeapon </option>
+                  <option value="24"> Hazards </option>` // 22 unique
+                  // duplicate options below for a higher chance with interesting/physics modifiers
+                  +`<option value="9"> HighGravity </option>
                   <option value="16"> LowGravity </option>
-                  <option value="17"> NoItems </option>
                   <option value="18"> Windy </option>
                   <option value="19"> Bouncy </option>
                   <option value="20"> Slippery </option>
-                  <option value="21"> NoAirControl </option>`
+                  <option value="21"> NoAirControl </option>
+                  <option value="22"> HyperEnemies </option>`
       }
       if (nameOfSection=='boss-room-modifiers'){
         defaultOptions = `<option value="1"> Poisonous </option>
@@ -426,7 +430,9 @@
                   <option value="18"> Windy </option>
                   <option value="19"> Bouncy </option>
                   <option value="20"> Slippery </option>
-                  <option value="21"> NoAirControl </option>`
+                  <option value="21"> NoAirControl </option>
+                  <option value="22"> HyperEnemies </option>
+                  <option value="23"> SlowWeapon </option>`
       }
       if(nameOfSection=='boss-gfx-room-modifiers'){
         defaultOptions = `<option value="1"> Poisonous </option>
@@ -438,7 +444,9 @@
                   <option value="18"> Windy </option>
                   <option value="19"> Bouncy </option>
                   <option value="20"> Slippery </option>
-                  <option value="21"> NoAirControl </option>`
+                  <option value="21"> NoAirControl </option>
+                  <option value="22"> HyperEnemies </option>
+                  <option value="23"> SlowWeapon </option>`
       }
 
       return `<tr>
@@ -466,6 +474,9 @@
                   <option value="19"> Bouncy </option>
                   <option value="20"> Slippery </option>
                   <option value="21"> NoAirControl </option>
+                  <option value="22"> HyperEnemies </option>
+                  <option value="23"> SlowWeapon </option>
+                  <option value="24"> Hazards </option>
                 </select>
               </td>
               <td>
@@ -497,7 +508,7 @@
 <html>
   <title>Aria of Sorrow: Reprise Configuration Tool</title>
   <body>
-    <h1>Aria of Sorrow: Reprise Configuration Tool for v0.8</h1>
+    <h1>Aria of Sorrow: Reprise Configuration Tool for v1.0</h1>
     <div>
       <div>
         This tool does not upload or download ROMs and operates locally.
