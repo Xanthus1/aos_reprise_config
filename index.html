@@ -40,19 +40,20 @@
     // copying randomizer rom settings
     class Configurator{
       static _RO = 0x8000000   // ROM address offset, when editing the ROM itself this offset isn't used
-      static BaseDifficulty = 0x87EFF00 - this._RO
-      static DifficultyInterval = 0x87EFF01 - this._RO
-      static PlayerHPDecrease = 0x87EFF02 - this._RO
-      static PlayerHPMin = 0x87EFF03 - this._RO
-      static EnemyHPIncrease = 0x87EFF04 - this._RO
-      static DeleteGameOnDeath = 0x87EFF05 - this._RO
-      static ModifierAllRooms = 0x87EFF06 - this._RO
-      // static ModifierOverride = 0x87EFF07 - this._RO // if any modifier would be active, use this one instead (not used anymore, change lists instead to avoid confusion)
-      static ProgressionType = 0x87EFF08 - this._RO
-      static ClassicvaniaMovement = 0x87EFF09 - this._RO   // removes air control from entire game
-      static RoomModifierList = 0x87EFEE0 - this._RO
-      static BossModifierList = 0x87EFEC0 - this._RO
-      static BossGFXModifierList = 0x87EFEA0 - this._RO
+      static ADDRESSES = {
+        baseDifficulty: 0x87EFF00 - this._RO,
+        difficultyInterval: 0x87EFF01 - this._RO,
+        playerHPDecrease: 0x87EFF02 - this._RO,
+        playerHPMin: 0x87EFF03 - this._RO,
+        enemyHPIncrease: 0x87EFF04 - this._RO,
+        modifierAllRooms: 0x87EFF06 - this._RO,
+        progressionType: 0x87EFF08 - this._RO,
+        classicvaniaMovement: 0x87EFF09 - this._RO,   // removes air control from entire game
+        roomModifierList: 0x87EFEE0 - this._RO,
+        bossModifierList: 0x87EFEC0 - this._RO,
+        bossGFXModifierList: 0x87EFEA0 - this._RO,
+      }
+
       static ModifierListLength = 0x20 // this length includes the first value being the length of the list itself. (0x1F modifiers)
 
 
@@ -77,7 +78,7 @@
 
 
       // Data ranges just to copy Enemy stats / names as well as customized font characters from fuseCV's Randomizer
-      static DATA_RANGES = [
+      static RANDO_DATA_RANGES = [
         this.TEXT_ENEMY_RANDOSTATS,
         this.TEXT_POINTERS_ENEMY_NAMES,
         this.ENEMY_STAT_FONT1,
@@ -92,7 +93,6 @@
         'playerHPDecrease',
         'playerHPMin',
         'enemyHPIncrease',
-        'deleteGameOnDeath',
         'progressionType',
         'modifierAllRooms',
         'baseModifierList',
@@ -102,8 +102,8 @@
 
       static copyRandoRomEnemies = function(randoRomArray, newRomArray){
         console.log('Applying Randomizer Rom changes to Enemy stats / names / custom font characters...')
-        for(let i=0; i<this.DATA_RANGES.length; i++){
-          let dataRange = this.DATA_RANGES[i]
+        for(let i=0; i<this.RANDO_DATA_RANGES.length; i++){
+          let dataRange = this.RANDO_DATA_RANGES[i]
                   
           // replace dataRange in newRomArray with randoRomArray's Data
           console.log(`replacing range ${dataRange[0]} through ${dataRange[1]}`)
@@ -113,6 +113,14 @@
         }
       }
 
+      /**
+       * Write a list of values to the ROM at a specified location.
+       *
+       * @param {array} romArray - New ROM array to update with values.
+       * @param {array} list - List of values to write.
+       * @param {number} location - Location in the ROM to start writing.
+       * @param {number} fillLength - Length of data to fill after writing the list.
+       */
       static writeListToRom = function(romArray, list, location, fillLength){
         for(let i=0; i<list.length; i++){
           romArray[location+i] = list[i]
@@ -122,7 +130,13 @@
           romArray[location+i] = 0
         }
       }
-      
+
+      /**
+       * Apply settings from the input dictionary to the new ROM.
+       *
+       * @param {object} settingsDict - Dictionary of settings to apply.
+       * @param {array} repriseRomArray - New ROM array to update with settings.
+       */
       static applySettings = function(settingsDict, repriseRomArray){
         for (let settingName of this.SettingsNames){
           if (!(settingName in settingsDict)){
@@ -130,14 +144,11 @@
             alert('Error with applying settings')
           }
         }
-        repriseRomArray[this.BaseDifficulty] = settingsDict['baseDifficulty'];
-        repriseRomArray[this.DifficultyInterval] = settingsDict['difficultyInterval'];
-        repriseRomArray[this.PlayerHPDecrease] = settingsDict['playerHPDecrease'];
-        repriseRomArray[this.PlayerHPMin] = settingsDict['playerHPMin'];
-        repriseRomArray[this.EnemyHPIncrease] = settingsDict['enemyHPIncrease'];
-        repriseRomArray[this.DeleteGameOnDeath] = settingsDict['deleteGameOnDeath'];    
-        repriseRomArray[this.ProgressionType] = settingsDict['progressionType'];        
-        repriseRomArray[this.ModifierAllRooms] = settingsDict['modifierAllRooms'];
+        // for each setting name, apply the value to the ROM in the appropriate address
+        for (let settingName of this.SettingsNames){
+          let address = this.ADDRESSES[settingName];
+          repriseRomArray[address] = settingsDict[settingName];
+        }
 
         // write modifier lists to rom
         let baseModifierList = settingsDict['baseModifierList']
@@ -156,7 +167,6 @@
       playerHPDecrease = document.getElementById('difficulty-player-hp');
       playerHPMin = document.getElementById('difficulty-player-hp-min');
       enemyHPIncrease = document.getElementById('difficulty-enemy-hp');
-      deleteGameOnDeath = document.getElementById('delete-on-death');
       progressionType = document.getElementById('experimental-progression');
       modifierAllRooms = document.getElementById('modifier-every-room');
 
@@ -230,7 +240,6 @@
         'playerHPDecrease': playerHPDecrease.value,
         'playerHPMin': playerHPMin.value,
         'enemyHPIncrease': enemyHPIncrease.value,
-        'deleteGameOnDeath': deleteGameOnDeath.checked,
         'progressionType': progressionType.checked,
         'modifierAllRooms': modifierAllRooms.value,
         'baseModifierList': getModifierList(baseModifierListElement),
@@ -407,7 +416,7 @@
                   <option value="21"> NoAirControl </option>
                   <option value="22"> HyperEnemies </option>
                   <option value="23"> SlowWeapon </option>
-                  <option value="24"> Hazards </option>` // 22 unique
+                  <option value="24"> Hazards </option>` // 24 unique
                   // duplicate options below for a higher chance with interesting/physics modifiers
                   +`<option value="9"> HighGravity </option>
                   <option value="16"> LowGravity </option>
@@ -547,7 +556,6 @@
           <br><input id="difficulty-player-hp" type="number" value="15"\> Amount Player Max HP decreases with each difficulty increase (default: 15)
           <br><input id="difficulty-player-hp-min" type="number" value="100"\> Minimum Player Max HP with difficulty increases (default: 100)
           <br><input id="difficulty-enemy-hp" type="number" value="15"\> Amount Enemy HP increases with each difficulty increase (default: 15)
-          <br><input id="delete-on-death" type="checkbox" checked="true"\> Delete Game on Death (default: checked)
           <br><input id="experimental-progression" type="checkbox"\> Enable experimental progression. Specific ranges of enemies and items are restricted to each area (Default: unchecked)
           <br><br>
           <select name="modifier-every-room" id="modifier-every-room"\>
@@ -574,6 +582,9 @@
             <option value="19"> Bouncy </option>
             <option value="20"> Slippery </option>
             <option value="21"> NoAirControl </option>
+            <option value="22"> HyperEnemies </option>
+            <option value="23"> SlowWeapon </option>
+            <option value="24"> Hazards </option>
           </select>  
           <label for="modifier-every-room">Modifier for every room. <b>This overrides any modifier lists below!</b> (default: No.)</label> 
       </div>
@@ -593,22 +604,6 @@
         <table>
           <tr id="boss-room-modifiers" class="room-modifier-section">
           </tr>
-          <!--
-          <option value="0">No (default)</option>
-          <option value="1"> Poisonous </option>
-          <option value="2"> Cursed </option>
-          <option value="8"> HighKnockback </option>
-          <option value="9"> HighGravity </option>
-          <option value="10"> SpectralDevil </option>
-          <option value="11"> GhostSwarm </option>
-          <option value="12"> SpectralCrow </option>
-          <option value="16"> LowGravity </option>
-          <option value="17"> NoItems </option>
-          <option value="18"> Windy </option>
-          <option value="19"> Bouncy </option>
-          <option value="20"> Slippery </option>
-          <option value="21"> NoAirControl </option>  
-          -->
         </table>
 
         <h3> Graham, Headhunter, Chaos Boss Room Modifiers </h3>
@@ -616,46 +611,9 @@
         <table>
           <tr id="boss-gfx-room-modifiers" class="room-modifier-section">
           </tr>
-          <!--
-                <option value="0">No (default)</option>
-                <option value="1"> Poisonous </option>
-                <option value="2"> Cursed </option>
-                <option value="8"> HighKnockback </option>
-                <option value="9"> HighGravity </option>
-                <option value="16"> LowGravity </option>
-                <option value="17"> NoItems </option>
-                <option value="18"> Windy </option>
-                <option value="19"> Bouncy </option>
-                <option value="20"> Slippery </option>
-                <option value="21"> NoAirControl </option>                  
-          -->
         </table>
        
       <br>
-      <!--
-        Select 
-        .definelabel ModifierPoisonous, 0x1
-        .definelabel ModifierCursed, 0x2
-        .definelabel ModifierPetrifying, 0x3
-        .definelabel ModifierTheif, 0x4
-        .definelabel ModifierDoubleHP, 0x5
-        .definelabel ModifierWingedSwarm, 0x6
-        .definelabel ModifierNoRedSouls, 0x7
-        .definelabel ModifierHighKnockback, 0x8
-        .definelabel ModifierHighGravity, 0x9
-        .definelabel ModifierSpectralDevil, 0xA
-        .definelabel ModifierGhostSwarm, 0xB
-        .definelabel ModifierSpectralCrow, 0xC
-        .definelabel ModifierPoisonHearts, 0xD
-        .definelabel ModifierCursedGold, 0xE
-        .definelabel ModifierDarkRoom, 0xF
-        .definelabel ModifierLowGravity, 0x10
-        .definelabel ModifierNoItems, 0x11
-        .definelabel ModifierWindy, 0x12
-        .definelabel ModifierBouncy, 0x13
-        .definelabel ModifierSlippery, 0x14
-        .definelabel ModifierNoAirControl, 0x15
-      -->
       </div>
 
 
